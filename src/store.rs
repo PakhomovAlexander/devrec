@@ -222,15 +222,27 @@ impl Store {
         out.sort();
         Ok(out)
     }
+    /// Lock the existing repository descriptor without creating state (nightly is read-only).
+    pub fn read_lock(&self) -> Result<(), String> {
+        fs::flock(&self.root, fs::FlockOperation::NonBlockingLockShared)
+            .map_err(|e| format!("reader lock: {e}"))
+    }
     pub fn lock(&self) -> Result<OwnedFd, String> {
+        fs::flock(&self.root, fs::FlockOperation::NonBlockingLockExclusive)
+            .map_err(|e| format!("repository writer lock: {e}"))?;
         let (fd, name) = self.parent(".devrec/lock", true)?;
         let lock = fs::openat(
             &fd,
             name.as_str(),
-            OFlags::RDWR | OFlags::CREATE | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            OFlags::RDWR | OFlags::CREATE | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC,
             Mode::from_bits_truncate(0o600),
         )
         .map_err(|e| e.to_string())?;
+        if fs::FileType::from_raw_mode(fs::fstat(&lock).map_err(|e| e.to_string())?.st_mode)
+            != fs::FileType::RegularFile
+        {
+            return Err("writer lock is not a regular file".into());
+        }
         fs::flock(&lock, fs::FlockOperation::NonBlockingLockExclusive)
             .map_err(|e| format!("writer lock: {e}"))?;
         Ok(lock)

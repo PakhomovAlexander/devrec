@@ -1,0 +1,7 @@
+# Installation and native lifecycle dependency
+
+The production reconciliation adapter is `src/af.rs`; its installation wire schema is `schemas/af-integration-v1.json`. `docs/af-integration.md` specifies the native structured Task package boundary and exact Worker policy. `reconciliation-worker.md` is the Worker instruction text for that installed native package, not a fabricated AF package schema.
+
+The publication Scenario depends on the separately tracked AF implementation Task `impl-scenario-lifecycle-1`. That change owns fresh implementation-Task allocation, accepted-candidate materialization, signed publication decisions, narrow installed adapter authority, commit/push/PR creation, bounded repairs, exact-head CI/review evidence, actual-merge waiting and owned-resource cleanup. Native schema references are captured in `references/af/`. Runtime pins must be generated from the accepted installed runtime and committed authority. This checkout deliberately does not duplicate the runtime extension, invent action schemas, ship zero/fake pins as executable, or claim the publication Scenario is installed.
+
+Root-coordinator integration must consume the accepted dependency output, build the native bundle against its actual schemas, and test restart reuse of the same Task/PR, changed-head invalidation, closed-without-merge preservation, and refusal of dirty/unowned cleanup before installation. Until that integration, only standalone devrec and its configurable native reconciliation boundary are available. No worker publishes or changes machine accounts.

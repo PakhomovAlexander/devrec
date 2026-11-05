@@ -95,8 +95,14 @@ fn run() -> Result<Value, String> {
             Ok(json!({"schema":"devrec/render@1","text":core::render(&records)?}))
         }
         "inventory" if args.len() == 1 => {
+            s.read_lock()?;
+            release::ready(&s)?;
             let c = release::config(&s)?;
-            Ok(json!({"schema":"devrec/inventory@1","sources":release::inventory(&s,&c)?}))
+            let sources = release::inventory(&s, &c)?;
+            let source_inventory_digest = devrec::store::digest(&devrec::store::json(&sources)?);
+            Ok(
+                json!({"schema":"devrec/inventory@1","sources":sources,"source_inventory_digest":source_inventory_digest}),
+            )
         }
         "release" if args.len() == 3 => {
             let _lock = s.lock()?;

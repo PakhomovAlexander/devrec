@@ -37,7 +37,7 @@ struct Transaction {
 }
 pub fn id(id: &str) -> Result<(), String> {
     if id.is_empty()
-        || id.len() > 100
+        || id.len() > 128
         || !id
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
@@ -74,7 +74,8 @@ pub fn ready(s: &Store) -> Result<(), String> {
         Ok(())
     }
 }
-pub fn pending(s: &Store) -> Result<(BTreeMap<String, Record>, BTreeMap<String, String>), String> {
+type Pending = (BTreeMap<String, Record>, BTreeMap<String, String>);
+pub fn pending(s: &Store) -> Result<Pending, String> {
     let mut records = BTreeMap::new();
     let mut hashes = BTreeMap::new();
     let mut total = 0usize;
@@ -134,6 +135,7 @@ fn raw_digest(s: &Store, path: &str) -> Result<String, String> {
     Ok(digest(&s.read(path)?.unwrap_or_default()))
 }
 pub fn current(s: &Store) -> Result<BTreeMap<String, Record>, String> {
+    s.read_lock()?;
     ready(s)?;
     let b = state(s)?;
     let (p, _) = pending(s)?;
@@ -223,13 +225,32 @@ fn fresh(s: &Store, p: &Plan) -> Result<(), String> {
     {
         return Err("release source, config or baseline is stale".into());
     }
+    if p.records.keys().ne(p.included.keys()) {
+        return Err("release plan record/include set mismatch".into());
+    }
     for (id, hash) in &p.included {
         let bytes = s
             .read(&format!(".devrec/fragments/{id}.json"))?
             .ok_or("included record disappeared")?;
-        if digest(&bytes) != *hash {
+        if digest(&bytes) != *hash
+            || serde_json::from_slice::<Record>(&bytes).map_err(|e| e.to_string())? != p.records[id]
+        {
             return Err(format!("included record changed: {id}"));
         }
+    }
+    let base = state(s)?;
+    let all = core::compose(&base, &p.records)?;
+    let affected = closure(&all, p.records.keys().cloned());
+    let prior = base
+        .records
+        .iter()
+        .filter(|(id, _)| affected.contains_key(*id))
+        .map(|(id, r)| (id.clone(), r.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let binding = value!({"release_id":p.release_id,"baseline_digest":p.baseline_digest,"config_digest":p.config_digest,"af_config_digest":p.af_config_digest,"inventory":p.inventory,"included":p.included});
+    let expected = value!({"schema":"devrec/reconciliation-request@1","release_id":p.release_id,"stage_digest":digest(&json(&binding)?),"baseline":prior,"records":p.records,"before":core::render(&prior)?,"after":core::render(&affected)?,"inventory":p.inventory});
+    if p.request != expected {
+        return Err("release request differs from exact captured records".into());
     }
     Ok(())
 }
@@ -321,6 +342,7 @@ fn reconciled(s: &Store, p: &Plan, receipt: &Value) -> Result<State, String> {
             .iter()
             .chain(r.supersedes.iter())
             .chain(r.depends_on.iter())
+            .chain(r.conflicts_with.iter())
             .any(|id| {
                 p.request["baseline"].get(id).is_none()
                     && !p.records.contains_key(id)
@@ -332,6 +354,16 @@ fn reconciled(s: &Store, p: &Plan, receipt: &Value) -> Result<State, String> {
         r.provenance=Some(serde_json::from_value(value!({"task_id":receipt["task_id"],"revision_id":receipt["revision_id"],"result_digest":receipt["result_digest"],"request_digest":receipt["request_digest"]})).map_err(|e|e.to_string())?);
         if r.performance.is_some() {
             return Err("model cannot manufacture performance authority".into());
+        }
+        if r.accepted
+            || r.supersedes.iter().any(|id| {
+                b.records
+                    .get(id)
+                    .or_else(|| proposed.get(id))
+                    .is_some_and(|prior| prior.accepted)
+            })
+        {
+            return Err("model cannot establish or supersede an accepted ADR decision".into());
         }
         proposed.insert(r.id.clone(), r);
     }
@@ -427,12 +459,17 @@ fn recover_fresh(s: &Store, p: &Plan, tx: &Transaction) -> Result<(), String> {
         return Err("recovery output checksum mismatch".into());
     }
     for (id, hash) in &tx.included {
-        if let Some(bytes) = s.read(&format!(".devrec/fragments/{id}.json"))? {
-            if digest(&bytes) != *hash {
-                return Err(format!("recovery consumed record changed: {id}"));
-            }
+        if let Some(bytes) = s.read(&format!(".devrec/fragments/{id}.json"))?
+            && digest(&bytes) != *hash
+        {
+            return Err(format!("recovery consumed record changed: {id}"));
         }
     }
+    let (mut late, _) = pending(s)?;
+    for id in tx.included.keys() {
+        late.remove(id);
+    }
+    core::compose(&tx.baseline, &late)?;
     Ok(())
 }
 fn failpoint(point: &str) -> Result<(), String> {

@@ -178,10 +178,7 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
     match (&config.review_adapter, &config.review_adapter_digest) {
         (None, None) => (),
         (Some(path), Some(digest))
-            if std::path::Path::new(path).is_absolute() && valid_digest(digest) =>
-        {
-            ()
-        }
+            if std::path::Path::new(path).is_absolute() && valid_digest(digest) => {}
         _ => return Err("review adapter requires an absolute path and sha256 digest".into()),
     }
     Ok(())
@@ -319,14 +316,13 @@ pub fn validate(records: &BTreeMap<String, Record>) -> Result<(), String> {
             }
             (None, _) => (),
         }
-        if let Some(p) = &r.provenance {
-            if p.task_id.trim().is_empty()
-                || p.revision_id.trim().is_empty()
+        if let Some(p) = &r.provenance
+            && (p.task_id.trim().is_empty()
+                || !valid_digest(&p.revision_id)
                 || !valid_digest(&p.result_digest)
-                || !valid_digest(&p.request_digest)
-            {
-                return Err(format!("invalid provenance: {id}"));
-            }
+                || !valid_digest(&p.request_digest))
+        {
+            return Err(format!("invalid provenance: {id}"));
         }
         let mut refs = BTreeSet::new();
         for list in [&r.depends_on, &r.supersedes, &r.conflicts_with] {

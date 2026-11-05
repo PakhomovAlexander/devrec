@@ -25,6 +25,7 @@ pub struct IntegrationConfig {
     pub executable_digest: String,
     pub repository: PathBuf,
     pub authority: String,
+    pub authority_policy_id: String,
     pub pipeline: String,
     pub task_kind: String,
     pub bindings: PathBuf,
@@ -46,6 +47,7 @@ impl IntegrationConfig {
         if self.schema != "devrec/af-integration@1" || !(1..=600).contains(&self.timeout_secs) {
             return Err("unsupported AF configuration schema or timeout (1..600 seconds)".into());
         }
+        require_digest(&self.authority_policy_id)?;
         for path in [
             &self.executable,
             &self.repository,
@@ -161,7 +163,7 @@ pub fn reconcile(config: &IntegrationConfig, request: &Value) -> Result<Value, S
         ])?;
     }
     let plan = native.call(&["task".into(), "explain".into(), id.clone(), "--json".into()])?;
-    validate_plan(&plan, &id)?;
+    validate_plan(&plan, &id, config, request)?;
     let plan_id = get_str(&plan, "plan_id")?.to_owned();
     let before = native.inspect(&id)?;
     if before.pointer("/phase/kind").and_then(Value::as_str) != Some("finished") {
@@ -175,7 +177,7 @@ pub fn reconcile(config: &IntegrationConfig, request: &Value) -> Result<Value, S
             "--json".into(),
         ])?;
     }
-    native.receipt(request, &id)
+    native.receipt(request, &id, &plan)
 }
 
 /// Re-read durable native evidence. Stored JSON and caller booleans grant no authority.
@@ -190,13 +192,18 @@ pub fn verify(config: &IntegrationConfig, request: &Value, receipt: &Value) -> R
     };
     let id = task_id(request)?;
     let plan = native.call(&["task".into(), "explain".into(), id.clone(), "--json".into()])?;
-    validate_plan(&plan, &id)?;
-    if native.receipt(request, &id)? != *receipt {
+    validate_plan(&plan, &id, config, request)?;
+    if native.receipt(request, &id, &plan)? != *receipt {
         return Err("stored reconciliation receipt differs from exact native AF evidence".into());
     }
     Ok(())
 }
-fn validate_plan(view: &Value, id: &str) -> Result<(), String> {
+fn validate_plan(
+    view: &Value,
+    id: &str,
+    config: &IntegrationConfig,
+    request: &Value,
+) -> Result<(), String> {
     if get_str(view, "schema")? != "af/task-inspection@16" || get_str(view, "task_id")? != id {
         return Err("unsupported or mismatched native AF inspection".into());
     }
@@ -209,6 +216,57 @@ fn validate_plan(view: &Value, id: &str) -> Result<(), String> {
     }
     require_digest(get_str(view, "plan_id")?)?;
     require_digest(revision)?;
+    if plan.pointer("/authority/policy_id").and_then(Value::as_str)
+        != Some(&config.authority_policy_id)
+    {
+        return Err("native plan authority differs from installed policy pin".into());
+    }
+    let inputs = plan
+        .get("inputs")
+        .and_then(Value::as_object)
+        .ok_or("native plan inputs absent")?;
+    if inputs
+        .keys()
+        .any(|k| k != &config.request_port && k != "requirements")
+    {
+        return Err("native reconciliation has unexpected ambient input".into());
+    }
+    let input = inputs
+        .get(&config.request_port)
+        .ok_or("native plan request input absent")?;
+    if get_str(input, "artifact_type")? != "custom/DevrecReconciliationRequest@1"
+        || get_str(input, "cardinality")? != "one"
+    {
+        return Err("native request input contract mismatch".into());
+    }
+    let ids = input
+        .get("artifact_ids")
+        .and_then(Value::as_array)
+        .ok_or("native input IDs absent")?;
+    if ids.len() != 1 {
+        return Err("native request input cardinality mismatch".into());
+    }
+    let input_id = ids[0].as_str().ok_or("invalid native input ID")?;
+    require_digest(input_id)?;
+    // Read only the exact artifact named by the native plan. AF remains responsible
+    // for CAS authentication; the pinned executable revalidates it at admission.
+    let state = fs::canonicalize(&config.state).map_err(|e| e.to_string())?;
+    let store = crate::store::Store::open(&state)?;
+    let bytes = store
+        .read(&format!(
+            "cas/objects/{}/{}",
+            &input_id[7..9],
+            &input_id[9..]
+        ))?
+        .ok_or("native captured request artifact missing")?;
+    let captured: Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    if captured["artifact_id"].as_str() != Some(input_id)
+        || captured["type"] != input["artifact_type"]
+        || captured["payload"]
+            != json!({"request_digest":request_digest(request)?,"request":request})
+    {
+        return Err("native plan captured a different reconciliation request".into());
+    }
     let bindings = plan
         .get("bindings")
         .and_then(Value::as_object)
@@ -264,11 +322,14 @@ impl Native<'_> {
     fn inspect(&mut self, id: &str) -> Result<Value, String> {
         self.call(&["task".into(), "show".into(), id.into(), "--json".into()])
     }
-    fn receipt(&mut self, request: &Value, id: &str) -> Result<Value, String> {
+    fn receipt(&mut self, request: &Value, id: &str, plan: &Value) -> Result<Value, String> {
         let view = self.inspect(id)?;
         if get_str(&view, "schema")? != "af/task-inspection@16" || get_str(&view, "task_id")? != id
         {
             return Err("native AF inspection identity mismatch".into());
+        }
+        if view["revision_id"] != plan["revision_id"] || view["plan_id"] != plan["plan_id"] {
+            return Err("native Task revision/plan changed after validation".into());
         }
         let revision = get_str(&view, "revision_id")?;
         let result = view.get("result").ok_or("native AF Task has no result")?;
@@ -373,9 +434,11 @@ impl Native<'_> {
             .stderr(stderr);
         #[cfg(unix)]
         command.process_group(0);
-        let mut child = command
-            .spawn()
-            .map_err(|e| format!("start native AF: {e}"))?;
+        let mut child = ChildGuard(
+            command
+                .spawn()
+                .map_err(|e| format!("start native AF: {e}"))?,
+        );
         let status = loop {
             if Instant::now() >= self.deadline
                 || fs::metadata(&out_path).map_err(|e| e.to_string())?.len() > MAX_JSON
@@ -397,6 +460,10 @@ impl Native<'_> {
             }
             thread::sleep(Duration::from_millis(20));
         };
+        #[cfg(unix)]
+        if let Some(pid) = rustix::process::Pid::from_raw(child.id() as i32) {
+            let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+        }
         let bytes = read_bounded(&out_path, MAX_JSON)?;
         if !status.success() {
             return Err(format!(
@@ -444,7 +511,16 @@ fn hash_file(path: &Path) -> Result<String, String> {
     Ok(digest(&read_bounded(path, 128 * 1024 * 1024)?))
 }
 fn read_bounded(path: &Path, max: u64) -> Result<Vec<u8>, String> {
-    let file = File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let file = rustix::fs::open(
+        path,
+        rustix::fs::OFlags::RDONLY
+            | rustix::fs::OFlags::NONBLOCK
+            | rustix::fs::OFlags::NOFOLLOW
+            | rustix::fs::OFlags::CLOEXEC,
+        rustix::fs::Mode::empty(),
+    )
+    .map(File::from)
+    .map_err(|e| format!("{}: {e}", path.display()))?;
     if !file.metadata().map_err(|e| e.to_string())?.is_file() {
         return Err("AF integration requires regular files".into());
     }
@@ -492,5 +568,29 @@ impl Scratch {
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+// Always reap the subprocess and descendants, including I/O/JSON failure paths.
+struct ChildGuard(std::process::Child);
+impl std::ops::Deref for ChildGuard {
+    type Target = std::process::Child;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for ChildGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(pid) = rustix::process::Pid::from_raw(self.0.id() as i32) {
+            let _ = rustix::process::kill_process_group(pid, rustix::process::Signal::KILL);
+        }
+        let _ = self.0.kill();
+        let _ = self.0.wait();
     }
 }
