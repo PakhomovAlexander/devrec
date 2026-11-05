@@ -190,6 +190,45 @@ impl Fixture {
 }
 
 #[test]
+fn reconciliation_source_contracts_have_singleton_parity() {
+    let public: Value =
+        serde_json::from_str(include_str!("../schemas/reconciliation-additions-v1.json")).unwrap();
+    let worker: Value = serde_json::from_str(include_str!(
+        "../integration/reconciliation/worker/outputs/reconciliation.schema.json"
+    ))
+    .unwrap();
+    let kind: Value = serde_json::from_str(include_str!(
+        "../integration/reconciliation/kind/structured.json"
+    ))
+    .unwrap();
+    assert_eq!(worker, kind["outputs"]["reconciliation"]["schema"]);
+    let source = &public["properties"]["source_artifact_ids"];
+    assert_eq!(source["minItems"], 1);
+    assert_eq!(source["maxItems"], 1);
+    assert_eq!(source, &worker["properties"]["source_artifact_ids"]);
+}
+
+fn fixture_sources(f: &Fixture, mode: &str) {
+    let input: Value =
+        serde_json::from_slice(&fs::read(f.base.join("auth/last-worker-input.json")).unwrap())
+            .unwrap();
+    let output: Value =
+        serde_json::from_slice(&fs::read(f.base.join("auth/last-reconciliation.json")).unwrap())
+            .unwrap();
+    let request = &input["inputs"]["request"][0]["artifact_id"];
+    let requirements = &input["inputs"]["requirements"][0]["artifact_id"];
+    assert!(request.is_string() && requirements.is_string());
+    assert_ne!(request, requirements);
+    let expected = match mode {
+        "bad-source" => json!([format!("sha256:{}", "0".repeat(64))]),
+        "two-sources" => json!([request, requirements]),
+        _ => json!([request]),
+    };
+    assert_eq!(output["source_artifact_ids"], expected);
+    assert_ne!(output["request_digest"], *request);
+}
+
+#[test]
 fn delivered_package_plans_and_runs_native_kernel_and_installs_for_release_review() {
     let Some(f) = Fixture::new() else { return };
     let bundle = f.install();
@@ -278,6 +317,7 @@ fn delivered_package_plans_and_runs_native_kernel_and_installs_for_release_revie
     ]));
     assert_eq!(run["result"]["domain_conclusion"], "structurally_validated");
     assert_eq!(run["attempts"], 2);
+    fixture_sources(&f, "exact");
     assert_eq!(
         fs::read_to_string(f.base.join("auth/calls")).unwrap(),
         "admission\nworker\n"
@@ -302,6 +342,7 @@ fn delivered_package_plans_and_runs_native_kernel_and_installs_for_release_revie
     success(f.cli(&["release", "prepare", "v1"]));
     let receipt = success(f.cli(&["release", "review", "v1"]));
     assert_eq!(receipt["additions"].as_array().unwrap().len(), 2);
+    fixture_sources(&f, "exact");
     assert_eq!(success(f.cli(&["release", "review", "v1"])), receipt);
     success(f.cli(&["release", "finalize", "v1"]));
     let baseline: Value =
@@ -319,31 +360,60 @@ fn delivered_package_plans_and_runs_native_kernel_and_installs_for_release_revie
         fs::read_to_string(f.base.join("auth/calls")).unwrap(),
         "admission\nworker\nadmission\nworker\n"
     );
-    // Kernel rejects mismatched external-input provenance without retrying the semantic pass.
-    fs::write(f.base.join("auth/bad-source"), "").unwrap();
-    let mut task: Value =
-        serde_json::from_slice(&fs::read(f.base.join("task.json")).unwrap()).unwrap();
-    task["task_id"] = json!("bad-provenance");
-    write(f.base.join("task.json"), task);
-    let bad_plan = success(f.native(&[
-        "task",
-        "plan",
-        "--file",
-        f.base.join("task.json").to_str().unwrap(),
-        "--input-json",
-        "request=input.json",
-        "--json",
-    ]));
-    let bad = f.native(&[
-        "task",
-        "run",
-        "bad-provenance",
-        "--confirm-plan",
-        bad_plan["plan_id"].as_str().unwrap(),
-        "--json",
-    ]);
-    assert!(!bad.status.success());
-    let bad: Value = serde_json::from_slice(&bad.stdout).unwrap();
-    assert_eq!(bad["attempts"], 2);
-    assert_ne!(bad["result"]["domain_conclusion"], "structurally_validated");
+    // Exercise both native rejection and the release CLI using the delivered package.
+    // Each failure must consume just admission plus one semantic Worker pass.
+    let mut extra_calls = Vec::new();
+    for mode in ["bad-source", "two-sources"] {
+        fs::write(f.base.join("auth").join(mode), "").unwrap();
+        let calls_before = fs::read_to_string(f.base.join("auth/calls")).unwrap();
+        let mut task: Value =
+            serde_json::from_slice(&fs::read(f.base.join("task.json")).unwrap()).unwrap();
+        task["task_id"] = json!(mode);
+        write(f.base.join("task.json"), task);
+        let bad_plan = success(f.native(&[
+            "task",
+            "plan",
+            "--file",
+            f.base.join("task.json").to_str().unwrap(),
+            "--input-json",
+            "request=input.json",
+            "--json",
+        ]));
+        let bad = f.native(&[
+            "task",
+            "run",
+            mode,
+            "--confirm-plan",
+            bad_plan["plan_id"].as_str().unwrap(),
+            "--json",
+        ]);
+        assert!(!bad.status.success());
+        let bad: Value = serde_json::from_slice(&bad.stdout).unwrap();
+        assert_eq!(bad["attempts"], 2);
+        assert_ne!(bad["result"]["domain_conclusion"], "structurally_validated");
+        fixture_sources(&f, mode);
+        let calls_after_native = fs::read_to_string(f.base.join("auth/calls")).unwrap();
+        if calls_after_native != format!("{calls_before}admission\nworker\n") {
+            extra_calls.push(format!("{mode} native: {calls_after_native:?}"));
+        }
+
+        success(f.cli(&["release", "prepare", mode]));
+        let rejected = f.cli(&["release", "review", mode]);
+        assert!(!rejected.status.success(), "CLI accepted {mode}");
+        fixture_sources(&f, mode);
+        let calls_after_cli = fs::read_to_string(f.base.join("auth/calls")).unwrap();
+        if calls_after_cli != format!("{calls_after_native}admission\nworker\n") {
+            extra_calls.push(format!("{mode} CLI: {calls_after_cli:?}"));
+        }
+        assert!(!f.cli(&["release", "finalize", mode]).status.success());
+        assert_eq!(
+            fs::read_to_string(f.base.join("auth/calls")).unwrap(),
+            calls_after_cli
+        );
+        fs::remove_file(f.base.join("auth").join(mode)).unwrap();
+    }
+    assert!(
+        extra_calls.is_empty(),
+        "extra semantic calls: {extra_calls:?}"
+    );
 }

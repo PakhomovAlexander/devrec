@@ -17,7 +17,7 @@ r=sys.stdin.read()
 if not r.lstrip().startswith('{'): kind='admission';msg='OK'
 else:
  kind='worker';r=json.loads(r)
- source=[x['artifact_id'] for x in r['inputs']['request']]
+ source=[r['inputs']['request'][0]['artifact_id']]
  capture=r['inputs']['request'][0]['payload']
  result={'schema':'devrec/reconciliation-additions@1','source_artifact_ids':source,'request_digest':capture['request_digest'],'additions':[],'contradictions':[]}
  if capture['request']['records']:
@@ -25,6 +25,10 @@ else:
   result['additions']=[{'schema_version':1,'id':'child','kind':'changelog','title':'Child','body':'Explicit child','depends_on':['parent']},{'schema_version':1,'id':'parent','kind':'changelog','title':'Parent','body':'Explicit parent','depends_on':[original]}]
  if os.path.exists(os.environ['CODEX_HOME']+'/bad-source'):
   result['source_artifact_ids']=['sha256:'+'0'*64]
+ if os.path.exists(os.environ['CODEX_HOME']+'/two-sources'):
+  result['source_artifact_ids']=source+[r['inputs']['requirements'][0]['artifact_id']]
+ with open(os.environ['CODEX_HOME']+'/last-worker-input.json','w') as f:json.dump(r,f)
+ with open(os.environ['CODEX_HOME']+'/last-reconciliation.json','w') as f:json.dump(result,f)
  msg=json.dumps({'schema':'af.worker-reply/1','outputs':{'reconciliation':[result]}})
 if '-o' in sys.argv:
  with open(sys.argv[sys.argv.index('-o')+1],'w') as f:f.write(msg)
