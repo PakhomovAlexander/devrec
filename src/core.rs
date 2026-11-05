@@ -439,7 +439,7 @@ pub fn render(records: &BTreeMap<String, Record>) -> Result<String, String> {
             out.push_str(
                 &next
                     .iter()
-                    .map(|id| format!("[{}](#record:{})", id, id))
+                    .map(|id| format!("[{id}](#record:{id})"))
                     .collect::<Vec<_>>()
                     .join(", "),
             );
@@ -464,7 +464,7 @@ pub fn render(records: &BTreeMap<String, Record>) -> Result<String, String> {
             }
         }
         if let Some(prior) = &r.revises {
-            out.push_str(&format!("\nRevises [{}](#record:{}).\n", prior, prior));
+            out.push_str(&format!("\nRevises [{prior}](#record:{prior}).\n"));
         }
         if !r.supersedes.is_empty() {
             let mut ids = r.supersedes.clone();
@@ -472,7 +472,7 @@ pub fn render(records: &BTreeMap<String, Record>) -> Result<String, String> {
             out.push_str(&format!(
                 "\nSupersedes {}.\n",
                 ids.iter()
-                    .map(|id| format!("[{}](#record:{})", id, id))
+                    .map(|id| format!("[{id}](#record:{id})"))
                     .collect::<Vec<_>>()
                     .join(", ")
             ));

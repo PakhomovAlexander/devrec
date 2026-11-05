@@ -129,7 +129,7 @@ impl Fixture {
     }
     fn refused(&self, args: &[&str], message: &str) {
         let out = self.run(args);
-        assert!(!out.status.success(), "unexpected success: {:?}", args);
+        assert!(!out.status.success(), "unexpected success: {args:?}");
         assert!(
             String::from_utf8_lossy(&out.stderr).contains(message),
             "{}",

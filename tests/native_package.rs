@@ -201,11 +201,87 @@ fn reconciliation_source_contracts_have_singleton_parity() {
         "../integration/reconciliation/kind/structured.json"
     ))
     .unwrap();
+    assert_eq!(kind["schema"], "af.structured-contract/2");
     assert_eq!(worker, kind["outputs"]["reconciliation"]["schema"]);
     let source = &public["properties"]["source_artifact_ids"];
     assert_eq!(source["minItems"], 1);
     assert_eq!(source["maxItems"], 1);
     assert_eq!(source, &worker["properties"]["source_artifact_ids"]);
+}
+
+#[test]
+fn old_native_refuses_contract2_bundle_before_model_dispatch() {
+    let old = std::env::var_os("DEVREC_OLD_AF_EXECUTABLE")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(|home| PathBuf::from(home).join(".local/share/af/versions/0.14.0-rc.7/af"))
+                .filter(|p| p.is_file())
+        });
+    let Some(old) = old else {
+        eprintln!("old-client comparison skipped: set DEVREC_OLD_AF_EXECUTABLE to contract1 AF");
+        return;
+    };
+    let Some(mut f) = Fixture::new() else { return };
+    f.af = fs::canonicalize(old).unwrap();
+    let kind = f.base.join("kind");
+    fs::create_dir(&kind).unwrap();
+    fs::write(
+        kind.join("kind.toml"),
+        include_str!("../integration/reconciliation/kind/kind.toml"),
+    )
+    .unwrap();
+    let contract2 = include_str!("../integration/reconciliation/kind/structured.json");
+    // The discriminator alone distinguishes unsupported semantics, not a
+    // schema/provenance relaxation or a version-string heuristic.
+    fs::write(
+        kind.join("structured.json"),
+        contract2.replace("af.structured-contract/2", "af.structured-contract/1"),
+    )
+    .unwrap();
+    let digest = || {
+        f.command(&f.af)
+            .args(["catalog", "digest"])
+            .arg(&kind)
+            .output()
+            .unwrap()
+    };
+    let accepted = digest();
+    assert!(
+        accepted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+    fs::write(kind.join("structured.json"), contract2).unwrap();
+    assert!(!digest().status.success(), "old client accepted contract2");
+    let refused = f
+        .command(
+            std::env::var_os("DEVREC_TEST_EXECUTABLE")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_devrec").into()),
+        )
+        .arg("--root")
+        .arg(&f.repo)
+        .args(["af", "bundle"])
+        .arg(&f.af)
+        .arg("unsupported")
+        .output()
+        .unwrap();
+    assert!(
+        !refused.status.success(),
+        "bundle accepted unsupported native runtime"
+    );
+    assert!(
+        !f.repo.join("unsupported").exists(),
+        "failed bundle was retained"
+    );
+    assert!(
+        !f.base.join("auth/calls").exists(),
+        "catalog validation dispatched a model"
+    );
+    assert!(
+        !f.state.exists(),
+        "catalog validation allocated native task state"
+    );
 }
 
 fn fixture_sources(f: &Fixture, mode: &str) {
