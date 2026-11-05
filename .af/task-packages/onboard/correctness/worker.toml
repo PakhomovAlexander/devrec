@@ -3,7 +3,7 @@ name = "onboard/correctness"
 version = "1.3.0"
 
 [signature]
-effects = ["read-source"]
+effects = ["read-source", "execute-checks"]
 roles = ["review"]
 worker_input_type = "af/ReviewInput@1"
 worker_output_type = "review.kernel/ReviewerResult@2"
