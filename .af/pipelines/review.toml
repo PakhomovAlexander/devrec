@@ -1,0 +1,270 @@
+version = 3
+check_timeout_seconds = 3600
+
+[subject]
+kind = "diff"
+
+[[checks]]
+name = "check"
+program = "make"
+required = true
+
+[[checks.args]]
+value = "check"
+provenance = "literal"
+
+[gate]
+provider = "trusted_local"
+required_isolation = "none"
+mode = "ephemeral-write"
+
+[[nodes]]
+id = "gate"
+kind = "gate"
+inputs = []
+
+[[nodes.outputs]]
+name = "decision"
+type = "review.kernel/GateDecision@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes]]
+id = "generation"
+kind = "generation"
+inputs = []
+
+[[nodes.outputs]]
+name = "findings"
+type = "review.kernel/FindingSet@1"
+cardinality = "one"
+optional = true
+snapshot_affinity = "any"
+
+[[nodes.outputs]]
+name = "change_set"
+type = "review.kernel/ChangeSet@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes]]
+id = "correctness"
+kind = "reviewer"
+demands = "required"
+gated_by = "gate"
+package = "correctness"
+
+[[nodes.inputs]]
+name = "gate"
+type = "review.kernel/GateDecision@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.inputs]]
+name = "prior_findings"
+type = "review.kernel/FindingSet@1"
+cardinality = "one"
+optional = true
+snapshot_affinity = "any"
+
+[[nodes.inputs]]
+name = "change_set"
+type = "review.kernel/ChangeSet@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.outputs]]
+name = "result"
+type = "review.kernel/ReviewerResult@2"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes]]
+id = "architecture"
+kind = "reviewer"
+demands = "required"
+gated_by = "gate"
+package = "architecture"
+
+[[nodes.inputs]]
+name = "gate"
+type = "review.kernel/GateDecision@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.inputs]]
+name = "prior_findings"
+type = "review.kernel/FindingSet@1"
+cardinality = "one"
+optional = true
+snapshot_affinity = "any"
+
+[[nodes.inputs]]
+name = "change_set"
+type = "review.kernel/ChangeSet@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.outputs]]
+name = "result"
+type = "review.kernel/ReviewerResult@2"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes]]
+id = "gather"
+kind = "gather"
+
+[[nodes.inputs]]
+name = "correctness"
+type = "review.kernel/ReviewerResult@2"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.inputs]]
+name = "architecture"
+type = "review.kernel/ReviewerResult@2"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.outputs]]
+name = "reports"
+type = "review.kernel/ReportSet@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes]]
+id = "ledger"
+kind = "ledger"
+
+[[nodes.inputs]]
+name = "reports"
+type = "review.kernel/ReportSet@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.outputs]]
+name = "findings"
+type = "review.kernel/FindingSet@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[nodes.outputs]]
+name = "demands"
+type = "review.kernel/DemandSet@1"
+cardinality = "one"
+optional = false
+snapshot_affinity = "same_subject"
+
+[[edges]]
+
+[edges.from]
+node = "generation"
+port = "findings"
+
+[edges.to]
+node = "correctness"
+port = "prior_findings"
+
+[[edges]]
+
+[edges.from]
+node = "generation"
+port = "change_set"
+
+[edges.to]
+node = "correctness"
+port = "change_set"
+
+[[edges]]
+
+[edges.from]
+node = "gate"
+port = "decision"
+
+[edges.to]
+node = "correctness"
+port = "gate"
+
+[[edges]]
+
+[edges.from]
+node = "correctness"
+port = "result"
+
+[edges.to]
+node = "gather"
+port = "correctness"
+
+[[edges]]
+
+[edges.from]
+node = "generation"
+port = "findings"
+
+[edges.to]
+node = "architecture"
+port = "prior_findings"
+
+[[edges]]
+
+[edges.from]
+node = "generation"
+port = "change_set"
+
+[edges.to]
+node = "architecture"
+port = "change_set"
+
+[[edges]]
+
+[edges.from]
+node = "gate"
+port = "decision"
+
+[edges.to]
+node = "architecture"
+port = "gate"
+
+[[edges]]
+
+[edges.from]
+node = "architecture"
+port = "result"
+
+[edges.to]
+node = "gather"
+port = "architecture"
+
+[[edges]]
+
+[edges.from]
+node = "gather"
+port = "reports"
+
+[edges.to]
+node = "ledger"
+port = "reports"
+
+[convergence]
+clean_rounds = 1
+max_rounds = 2
+gate = "major"
+
+[budgets]
+unit = "tokens"
+attempt = 300000
+run = 1000000

@@ -1,0 +1,22 @@
+version = 1
+
+[project]
+name = "devrec"
+min_af = "0.6"
+
+[defaults]
+pipeline = "review"
+
+[task.defaults]
+pipeline = "onboard/implementation-reviewed"
+fallback = "refuse"
+
+[task.defaults.limits]
+tokens = 6000000
+max_attempts = 16
+wall_ms = 22000000
+
+[task.defaults.limits.verification]
+tokens = 2000000
+attempts = 8
+wall_ms = 10800000
