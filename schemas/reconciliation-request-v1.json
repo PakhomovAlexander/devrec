@@ -1,0 +1,82 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "request_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "devrec/reconciliation-request@1"
+        },
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]{1,128}$"
+        },
+        "stage_digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "baseline": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "fragment-v1.json"
+          }
+        },
+        "records": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "fragment-v1.json"
+          }
+        },
+        "before": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        },
+        "inventory": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "size",
+              "digest"
+            ]
+          }
+        }
+      },
+      "required": [
+        "schema",
+        "release_id",
+        "stage_digest",
+        "baseline",
+        "records",
+        "before",
+        "after",
+        "inventory"
+      ]
+    }
+  },
+  "required": [
+    "request_digest",
+    "request"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "devrec/reconciliation-request-wrapper@1"
+}

@@ -1,0 +1,93 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "devrec/af-integration@1"
+    },
+    "authority": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "authority_policy_id": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "executable_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "timeout_secs": {
+      "type": "integer",
+      "minimum": 180,
+      "maximum": 600
+    },
+    "executable": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Absolute path without parent traversal; runtime applies additional filesystem checks."
+    },
+    "repository": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Absolute path without parent traversal; runtime applies additional filesystem checks."
+    },
+    "bindings": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Absolute path without parent traversal; runtime applies additional filesystem checks."
+    },
+    "state": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Absolute path without parent traversal; runtime applies additional filesystem checks."
+    },
+    "scratch": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Absolute path without parent traversal; runtime applies additional filesystem checks."
+    },
+    "pipeline": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_/-]+$"
+    },
+    "task_kind": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_/-]+$"
+    },
+    "request_port": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_/-]+$"
+    },
+    "result_port": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9_/-]+$"
+    }
+  },
+  "required": [
+    "schema",
+    "authority",
+    "authority_policy_id",
+    "executable_digest",
+    "timeout_secs",
+    "executable",
+    "repository",
+    "bindings",
+    "state",
+    "scratch",
+    "pipeline",
+    "task_kind",
+    "request_port",
+    "result_port"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "devrec/af-integration@1"
+}

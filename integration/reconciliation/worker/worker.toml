@@ -1,0 +1,42 @@
+schema = "af.worker/1"
+name = "devrec/reconcile-worker"
+version = "1.0.0"
+[signature]
+effects = []
+roles = ["reconcile"]
+evidence = {}
+retains = { reconciliation = ["request", "requirements"] }
+worker_input_type = "custom/DevrecStructuredInput@1"
+worker_output_type = "custom/DevrecReconciliationAdditions@1"
+[signature.attempt]
+tokens = 8192
+wall_ms = 120000
+[runner]
+kind = "model"
+provider_kind = "codex"
+model = "gpt-6.1-sol"
+effort = "low"
+
+[signature.contract.inputs.requirements]
+artifact_type = "af/Requirements@1"
+cardinality = "one"
+optional = false
+covers = []
+[signature.contract.inputs.requirements.affinity]
+kind = "unbound"
+
+[signature.contract.inputs.request]
+artifact_type = "custom/DevrecReconciliationRequest@1"
+cardinality = "one"
+optional = false
+covers = []
+[signature.contract.inputs.request.affinity]
+kind = "unbound"
+
+[signature.contract.outputs.reconciliation]
+artifact_type = "custom/DevrecReconciliationAdditions@1"
+cardinality = "one"
+optional = false
+covers = []
+[signature.contract.outputs.reconciliation.affinity]
+kind = "unbound"

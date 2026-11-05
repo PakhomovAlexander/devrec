@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "protected_sources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "review_adapter": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "review_adapter_digest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "schema_version"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "devrec/config@1",
+  "title": "Development record configuration v1",
+  "description": "Adapter path and digest must be both absent or both supplied. Rust validates absolute adapter paths and unique safe repository-relative source paths."
+}

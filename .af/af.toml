@@ -8,7 +8,7 @@ min_af = "0.6"
 pipeline = "review"
 
 [task.defaults]
-pipeline = "onboard/implementation-reviewed"
+pipeline = "impl/implementation"
 fallback = "refuse"
 
 [task.defaults.limits]

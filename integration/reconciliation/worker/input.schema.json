@@ -1,0 +1,633 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "requirements",
+    "request"
+  ],
+  "properties": {
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "payload"
+        ],
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifact_type": {
+            "const": "af/Requirements@1"
+          },
+          "payload": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "request": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact_id",
+          "artifact_type",
+          "payload"
+        ],
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifact_type": {
+            "const": "custom/DevrecReconciliationRequest@1"
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "request_digest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "request": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "schema": {
+                    "const": "devrec/reconciliation-request@1"
+                  },
+                  "release_id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9_-]{1,128}$"
+                  },
+                  "stage_digest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "baseline": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "schema_version": {
+                          "const": 1
+                        },
+                        "id": {
+                          "type": "string",
+                          "default": "",
+                          "description": "Empty only before CLI ID allocation; persisted records require a valid ID."
+                        },
+                        "name": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "kind": {
+                          "enum": [
+                            "changelog",
+                            "adr",
+                            "docs",
+                            "performance"
+                          ]
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295,
+                          "default": 1
+                        },
+                        "revises": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[a-z0-9_-]{1,128}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "retired": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "supersedes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]{1,128}$"
+                          },
+                          "uniqueItems": true,
+                          "default": []
+                        },
+                        "depends_on": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]{1,128}$"
+                          },
+                          "uniqueItems": true,
+                          "default": []
+                        },
+                        "conflicts_with": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]{1,128}$"
+                          },
+                          "uniqueItems": true,
+                          "default": []
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "default": {}
+                        },
+                        "sections": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9_-]{1,128}$"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "body": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9_-]{1,128}$"
+                                },
+                                "uniqueItems": true,
+                                "default": []
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "body"
+                            ]
+                          },
+                          "default": []
+                        },
+                        "accepted": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "performance": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "policy"
+                                },
+                                "source_inventory_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "rationale": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "source_inventory_digest",
+                                "rationale"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "measurement"
+                                },
+                                "source_inventory_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "evidence": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "type": "string"
+                                    },
+                                    "digest": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    },
+                                    "command": {
+                                      "type": "array",
+                                      "minItems": 1,
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "result_digest": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "digest",
+                                    "command",
+                                    "result_digest"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "source_inventory_digest",
+                                "evidence"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "provenance": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "task_id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "revision_id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "result_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "request_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "task_id",
+                                "revision_id",
+                                "result_digest",
+                                "request_digest"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "schema_version",
+                        "kind",
+                        "title",
+                        "body"
+                      ],
+                      "title": "Development record input v1",
+                      "description": "Strict serde wire contract with local scalar constraints. Graph relationships, non-whitespace content, kind-specific fields, safe relative paths, revisions, and evidence authority are additionally checked by Rust."
+                    }
+                  },
+                  "records": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "schema_version": {
+                          "const": 1
+                        },
+                        "id": {
+                          "type": "string",
+                          "default": "",
+                          "description": "Empty only before CLI ID allocation; persisted records require a valid ID."
+                        },
+                        "name": {
+                          "type": "string",
+                          "default": ""
+                        },
+                        "kind": {
+                          "enum": [
+                            "changelog",
+                            "adr",
+                            "docs",
+                            "performance"
+                          ]
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "body": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4294967295,
+                          "default": 1
+                        },
+                        "revises": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "pattern": "^[a-z0-9_-]{1,128}$"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "retired": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "supersedes": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]{1,128}$"
+                          },
+                          "uniqueItems": true,
+                          "default": []
+                        },
+                        "depends_on": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]{1,128}$"
+                          },
+                          "uniqueItems": true,
+                          "default": []
+                        },
+                        "conflicts_with": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "pattern": "^[a-z0-9_-]{1,128}$"
+                          },
+                          "uniqueItems": true,
+                          "default": []
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          },
+                          "default": {}
+                        },
+                        "sections": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[a-z0-9_-]{1,128}$"
+                              },
+                              "title": {
+                                "type": "string"
+                              },
+                              "body": {
+                                "type": "string"
+                              },
+                              "after": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9_-]{1,128}$"
+                                },
+                                "uniqueItems": true,
+                                "default": []
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "body"
+                            ]
+                          },
+                          "default": []
+                        },
+                        "accepted": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "performance": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "policy"
+                                },
+                                "source_inventory_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "rationale": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "source_inventory_digest",
+                                "rationale"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "type": {
+                                  "const": "measurement"
+                                },
+                                "source_inventory_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "evidence": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "path": {
+                                      "type": "string"
+                                    },
+                                    "digest": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    },
+                                    "command": {
+                                      "type": "array",
+                                      "minItems": 1,
+                                      "items": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "result_digest": {
+                                      "type": "string",
+                                      "pattern": "^sha256:[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "path",
+                                    "digest",
+                                    "command",
+                                    "result_digest"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "source_inventory_digest",
+                                "evidence"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "provenance": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "task_id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "revision_id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "result_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                },
+                                "request_digest": {
+                                  "type": "string",
+                                  "pattern": "^sha256:[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "task_id",
+                                "revision_id",
+                                "result_digest",
+                                "request_digest"
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "schema_version",
+                        "kind",
+                        "title",
+                        "body"
+                      ],
+                      "title": "Development record input v1",
+                      "description": "Strict serde wire contract with local scalar constraints. Graph relationships, non-whitespace content, kind-specific fields, safe relative paths, revisions, and evidence authority are additionally checked by Rust."
+                    }
+                  },
+                  "before": {
+                    "type": "string"
+                  },
+                  "after": {
+                    "type": "string"
+                  },
+                  "inventory": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "size": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "size",
+                        "digest"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "schema",
+                  "release_id",
+                  "stage_digest",
+                  "baseline",
+                  "records",
+                  "before",
+                  "after",
+                  "inventory"
+                ]
+              }
+            },
+            "required": [
+              "request_digest",
+              "request"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

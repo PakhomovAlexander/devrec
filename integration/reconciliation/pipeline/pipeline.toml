@@ -1,0 +1,89 @@
+schema = "af.pipeline/4"
+name = "devrec/reconcile"
+version = "1.0.0"
+max_attempts = 2
+max_parallel = 1
+[accepts]
+kinds = ["devrec-reconciliation"]
+required_facts = {}
+[slots.reconcile]
+worker = "devrec/reconcile-worker"
+role = "reconcile"
+input_type = "custom/DevrecStructuredInput@1"
+output_type = "custom/DevrecReconciliationAdditions@1"
+min_attempts = 1
+max_attempts = 1
+allow_local_replacement = false
+independent_from = []
+
+[contract.inputs.requirements]
+artifact_type = "af/Requirements@1"
+cardinality = "one"
+optional = false
+covers = []
+[contract.inputs.requirements.affinity]
+kind = "unbound"
+
+[contract.inputs.request]
+artifact_type = "custom/DevrecReconciliationRequest@1"
+cardinality = "one"
+optional = false
+covers = []
+[contract.inputs.request.affinity]
+kind = "unbound"
+
+[contract.outputs.reconciliation]
+artifact_type = "custom/DevrecReconciliationAdditions@1"
+cardinality = "one"
+optional = false
+covers = []
+[contract.outputs.reconciliation.affinity]
+kind = "unbound"
+
+[contract.outputs.validation]
+artifact_type = "af/StructuredValidation@1"
+cardinality = "one"
+optional = false
+covers = ["structured"]
+[contract.outputs.validation.affinity]
+kind = "unbound"
+
+[[nodes]]
+id = "work"
+[nodes.operator]
+op = "worker"
+slot = "reconcile"
+[nodes.inputs.requirements]
+kind = "input"
+port = "requirements"
+[nodes.inputs.request]
+kind = "input"
+port = "request"
+
+[[nodes]]
+id = "accept"
+[nodes.operator]
+op = "structured_accept"
+[nodes.inputs.requirements]
+kind = "input"
+port = "requirements"
+[nodes.inputs.request]
+kind = "input"
+port = "request"
+[nodes.inputs.result_reconciliation]
+kind = "node"
+node = "work"
+port = "reconciliation"
+
+[outputs.reconciliation]
+kind = "node"
+node = "accept"
+port = "reconciliation"
+[outputs.validation]
+kind = "node"
+node = "accept"
+port = "validation"
+[coverage.structured]
+kind = "node"
+node = "accept"
+port = "validation"
