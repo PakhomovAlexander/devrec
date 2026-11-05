@@ -19,7 +19,7 @@
     },
     "timeout_secs": {
       "type": "integer",
-      "minimum": 1,
+      "minimum": 180,
       "maximum": 600
     },
     "executable": {

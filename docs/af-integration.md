@@ -17,10 +17,10 @@ The repository's native catalog must reserve bounded provider admission. The tes
 ```toml
 [provider_admission]
 tokens = 4096
-wall_ms = 5000
+wall_ms = 45000
 ```
 
-Keep `codex-personal` as the Worker provider; authentication remains a machine-local operator responsibility. The Worker reserves 8,192 tokens and 20 seconds, uses `gpt-6.1-sol` with `low` effort, declares no effects, and has precisely one semantic attempt. The native Task and Pipeline require **two total counted attempts**: one provider-admission capability probe and one semantic Worker pass. The actual planner rejects Task max_attempts=1 as infeasible, reporting mandatory attempts=2; Pipeline max_attempts=1 is also infeasible. Both totals are therefore 2, with Worker max_attempts=1 and every verification/recovery allowance 0. The adapter inspects the compiled nodes, parallelism, Task limits and allowances before dispatch. Failed semantic execution receives no retry. Larger pre-existing admission reservations may make the fixed 16,384-token Task budget infeasible; review the catalog policy rather than increasing semantic attempts or silently fitting limits. There is no reviewer panel, remote gate or separate verification Task.
+Keep `codex-personal` as the Worker provider; authentication remains a machine-local operator responsibility. The Worker reserves 8,192 tokens and 120 seconds, uses `gpt-6.1-sol` with `low` effort, declares no effects, and has precisely one semantic attempt. The native Task and Pipeline require **two total counted attempts**: one provider-admission capability probe and one semantic Worker pass. The actual planner rejects Task max_attempts=1 as infeasible, reporting mandatory attempts=2; Pipeline max_attempts=1 is also infeasible. Both totals are therefore 2, with Worker max_attempts=1 and every verification/recovery allowance 0. The adapter inspects the compiled nodes, parallelism, Task limits and allowances before dispatch. Failed semantic execution receives no retry. Larger pre-existing admission reservations may make the fixed 16,384-token Task budget infeasible; review the catalog policy rather than increasing semantic attempts or silently fitting limits. There is no reviewer panel, remote gate or separate verification Task.
 
 Write `.devrec/af.json` (absolute paths, replace every installation value):
 
@@ -39,9 +39,11 @@ Write `.devrec/af.json` (absolute paths, replace every installation value):
   "scratch": "/absolute/private/writable-scratch",
   "request_port": "request",
   "result_port": "reconciliation",
-  "timeout_secs": 120
+  "timeout_secs": 180
 }
 ```
+
+The operator-configurable `timeout_secs` must be 180–600 seconds. It bounds both the overall native Task and each adapter operation (including its subprocesses); the 180-second minimum accommodates 45-second admission plus the 120-second Worker reservation and protocol overhead. These allowances do not change token or attempt limits. The inert protocol test proves native planning and execution, not live provider latency.
 
 These are installation pins, not runnable example hashes. The executable path must name the regular binary itself, not a symlink launcher. Native state must be outside the authority repository; its parent and scratch must exist. Keep authority config and native state under trusted local ownership. AF enforces model authentication, schema admission, CAS authentication and native Task policy. Source pinning in devrec additionally pins the entire `.devrec/af.json` bytes at release prepare.
 

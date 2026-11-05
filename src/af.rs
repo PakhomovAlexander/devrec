@@ -44,8 +44,8 @@ pub fn load(path: &Path) -> Result<IntegrationConfig, String> {
 }
 impl IntegrationConfig {
     fn validate(&self) -> Result<(), String> {
-        if self.schema != "devrec/af-integration@1" || !(1..=600).contains(&self.timeout_secs) {
-            return Err("unsupported AF configuration schema or timeout (1..600 seconds)".into());
+        if self.schema != "devrec/af-integration@1" || !(180..=600).contains(&self.timeout_secs) {
+            return Err("unsupported AF configuration schema or timeout (180..600 seconds)".into());
         }
         require_digest(&self.authority_policy_id)?;
         for path in [

@@ -14,3 +14,7 @@ cd "$work/source"
 make check-local
 make install
 "$work/source/target/install/bin/devrec" --help
+# Re-run integration coverage through the privately installed CLI.
+DEVREC_TEST_EXECUTABLE="$work/source/target/install/bin/devrec" \
+CARGO_HOME="$work/source/target/cargo-home" TMPDIR="$work/source/target/tmp" \
+cargo test --locked --offline --test cli --test native --test native_package

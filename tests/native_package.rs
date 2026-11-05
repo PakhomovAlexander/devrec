@@ -109,27 +109,33 @@ impl Fixture {
             .unwrap()
     }
     fn cli(&self, args: &[&str]) -> Output {
-        self.command(env!("CARGO_BIN_EXE_devrec"))
-            .arg("--root")
-            .arg(self.base.join("records"))
-            .args(args)
-            .output()
-            .unwrap()
+        self.command(
+            std::env::var_os("DEVREC_TEST_EXECUTABLE")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_devrec").into()),
+        )
+        .arg("--root")
+        .arg(self.base.join("records"))
+        .args(args)
+        .output()
+        .unwrap()
     }
     fn install(&self) -> Value {
         let receipt = success(
-            self.command(env!("CARGO_BIN_EXE_devrec"))
-                .arg("--root")
-                .arg(&self.repo)
-                .args(["af", "bundle"])
-                .arg(&self.af)
-                .arg("reconciliation")
-                .output()
-                .unwrap(),
+            self.command(
+                std::env::var_os("DEVREC_TEST_EXECUTABLE")
+                    .unwrap_or_else(|| env!("CARGO_BIN_EXE_devrec").into()),
+            )
+            .arg("--root")
+            .arg(&self.repo)
+            .args(["af", "bundle"])
+            .arg(&self.af)
+            .arg("reconciliation")
+            .output()
+            .unwrap(),
         );
         fs::create_dir(self.repo.join(".af")).unwrap();
         let catalog = format!(
-            "schema = \"af.task-catalog/2\"\nno_match = \"refuse\"\n[independence]\ncommand_workers_by_package = true\ndistinct_principals = false\ndistinct_providers = false\ndistinct_models = false\n[provider_admission]\ntokens = 4096\nwall_ms = 5000\n\n{}",
+            "schema = \"af.task-catalog/2\"\nno_match = \"refuse\"\n[independence]\ncommand_workers_by_package = true\ndistinct_principals = false\ndistinct_providers = false\ndistinct_models = false\n[provider_admission]\ntokens = 4096\nwall_ms = 45000\n\n{}",
             fs::read_to_string(self.repo.join("reconciliation/catalog-snippet.toml")).unwrap()
         );
         fs::write(self.repo.join(".af/task-catalog.toml"), catalog).unwrap();
@@ -164,7 +170,7 @@ impl Fixture {
     fn plan(&self, attempts: u64) -> Output {
         write(
             self.base.join("task.json"),
-            json!({"schema":"af.task-file/1","task_id":"install-probe","kind":"devrec-reconciliation","goal":"Validate installed reconciliation package","strategy":"light","pipeline":{"name":"devrec/reconcile","fallback":"refuse"},"limits":{"tokens":16384,"max_attempts":attempts,"wall_ms":120000,"verification":{"tokens":0,"attempts":0,"wall_ms":0}}}),
+            json!({"schema":"af.task-file/1","task_id":"install-probe","kind":"devrec-reconciliation","goal":"Validate installed reconciliation package","strategy":"light","pipeline":{"name":"devrec/reconcile","fallback":"refuse"},"limits":{"tokens":16384,"max_attempts":attempts,"wall_ms":180000,"verification":{"tokens":0,"attempts":0,"wall_ms":0}}}),
         );
         self.native(&[
             "task",
@@ -206,16 +212,19 @@ fn delivered_package_plans_and_runs_native_kernel_and_installs_for_release_revie
     }
     // Builder refuses overwriting a reviewed package.
     assert!(
-        !f.command(env!("CARGO_BIN_EXE_devrec"))
-            .arg("--root")
-            .arg(&f.repo)
-            .args(["af", "bundle"])
-            .arg(&f.af)
-            .arg("reconciliation")
-            .output()
-            .unwrap()
-            .status
-            .success()
+        !f.command(
+            std::env::var_os("DEVREC_TEST_EXECUTABLE")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_devrec").into())
+        )
+        .arg("--root")
+        .arg(&f.repo)
+        .args(["af", "bundle"])
+        .arg(&f.af)
+        .arg("reconciliation")
+        .output()
+        .unwrap()
+        .status
+        .success()
     );
     write(
         f.base.join("input.json"),
@@ -231,6 +240,13 @@ fn delivered_package_plans_and_runs_native_kernel_and_installs_for_release_revie
     let plan = success(f.plan(2));
     assert_eq!(plan["schema"], "af/task-inspection@16");
     assert_eq!(plan["plan"]["limits"]["max_attempts"], 2);
+    // Native planning compiles the relative Task wall budget to an absolute deadline.
+    let task: Value = serde_json::from_slice(&fs::read(f.base.join("task.json")).unwrap()).unwrap();
+    assert_eq!(task["limits"]["wall_ms"], 180000);
+    assert_eq!(
+        diagnostic["planning_diagnostic"]["mandatory"]["wall_ms"],
+        165000
+    );
     assert_eq!(plan["graph"]["slots"].as_object().unwrap().len(), 1);
     assert_eq!(
         plan["graph"]["slots"]["root.slots.reconcile"]["max_attempts"],
@@ -276,7 +292,7 @@ fn delivered_package_plans_and_runs_native_kernel_and_installs_for_release_revie
     fs::create_dir(f.base.join("records/.devrec")).unwrap();
     write(
         f.base.join("records/.devrec/af.json"),
-        json!({"schema":"devrec/af-integration@1","executable":f.af,"executable_digest":bundle["executable_digest"],"repository":f.repo,"authority":String::from_utf8(head.stdout).unwrap().trim(),"authority_policy_id":plan["plan"]["authority"]["policy_id"],"pipeline":"devrec/reconcile","task_kind":"devrec-reconciliation","bindings":f.repo.join("reconciliation/bindings.toml"),"state":f.state,"scratch":f.base.join("scratch"),"request_port":"request","result_port":"reconciliation","timeout_secs":120}),
+        json!({"schema":"devrec/af-integration@1","executable":f.af,"executable_digest":bundle["executable_digest"],"repository":f.repo,"authority":String::from_utf8(head.stdout).unwrap().trim(),"authority_policy_id":plan["plan"]["authority"]["policy_id"],"pipeline":"devrec/reconcile","task_kind":"devrec-reconciliation","bindings":f.repo.join("reconciliation/bindings.toml"),"state":f.state,"scratch":f.base.join("scratch"),"request_port":"request","result_port":"reconciliation","timeout_secs":180}),
     );
     write(
         f.base.join("records/input.json"),

@@ -95,7 +95,7 @@ impl Fixture {
                 "executable_digest":digest(TRANSPORT.as_bytes()), "repository":authority,
                 "authority":"1111111111111111111111111111111111111111", "authority_policy_id":hash('1'),
                 "pipeline":"reconciliation", "task_kind":"devrec-reconciliation", "bindings":bindings,
-                "state":state, "scratch":scratch, "request_port":"request", "result_port":"additions", "timeout_secs":10
+                "state":state, "scratch":scratch, "request_port":"request", "result_port":"additions", "timeout_secs":180
             }),
         );
         write(&state, "control.json", &json!({}));
@@ -107,7 +107,10 @@ impl Fixture {
         }
     }
     fn cmd(&self, args: &[&str]) -> Command {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_devrec"));
+        let mut cmd = Command::new(
+            std::env::var_os("DEVREC_TEST_EXECUTABLE")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_devrec").into()),
+        );
         cmd.arg("--root").arg(&self.root).args(args);
         cmd
     }
@@ -192,6 +195,7 @@ fn native_review_allocates_runs_and_preserves_explicit_additions_and_provenance(
     assert_eq!(task["schema"], "af.task-file/1");
     assert_eq!(task["strategy"], "light");
     assert_eq!(task["limits"]["max_attempts"], 2);
+    assert_eq!(task["limits"]["wall_ms"], 180000);
     assert_eq!(task["limits"]["verification"]["attempts"], 0);
     assert_eq!(task["pipeline"]["fallback"], "refuse");
     assert_eq!(
@@ -557,12 +561,15 @@ fn shared_snapshot_blocks_writers_and_writer_blocks_current_check_and_render() {
 fn nightly_snapshot_of_empty_repository_creates_no_state() {
     let owner = tempfile::tempdir().unwrap();
     let root = fs::canonicalize(owner.path()).unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_devrec"))
-        .arg("--root")
-        .arg(&root)
-        .args(["render", "--nightly"])
-        .output()
-        .unwrap();
+    let out = Command::new(
+        std::env::var_os("DEVREC_TEST_EXECUTABLE")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_devrec").into()),
+    )
+    .arg("--root")
+    .arg(&root)
+    .args(["render", "--nightly"])
+    .output()
+    .unwrap();
     assert!(
         out.status.success(),
         "{}",
@@ -803,4 +810,69 @@ fn failed_bundle_validation_cleans_up_only_its_own_output() {
         fs::read_to_string(base.join("reviewed-bundle/owned")).unwrap(),
         "preserve"
     );
+}
+
+#[test]
+fn accepted_adr_successor_requires_acceptance_before_and_after_compaction() {
+    let f = Fixture::new();
+    let decision = json!({"schema_version":1,"id":"decision","kind":"adr","title":"Decision","body":"Original rationale","accepted":true});
+    write(&f.root, "input.json", &decision);
+    let original = f.ok(&["new", "input.json"])["record"].clone();
+    for compacted in [false, true] {
+        if compacted {
+            f.ok(&["release", "prepare", "v1"]);
+            f.ok(&["release", "review", "v1"]);
+            f.ok(&["release", "finalize", "v1"]);
+            assert_eq!(f.baseline()["records"]["decision"], original);
+        }
+        let before = f.ok(&["render"]);
+        let draft = json!({"schema_version":1,"id":"successor","kind":"adr","title":"Successor","body":"Successor rationale","accepted":false,"supersedes":["decision"]});
+        write(&f.root, "input.json", &draft);
+        let out = f.run(&["new", "input.json"]);
+        assert!(!out.status.success());
+        assert!(String::from_utf8_lossy(&out.stderr).contains("only an accepted ADR"));
+        assert!(!f.root.join(".devrec/fragments/successor.json").exists());
+        assert_eq!(f.ok(&["render"]), before);
+        // A draft arriving through a branch must also be refused on reload.
+        write(&f.root, ".devrec/fragments/successor.json", &draft);
+        for args in [
+            &["check"][..],
+            &["render"][..],
+            &["release", "prepare", "invalid"][..],
+        ] {
+            let out = f.run(args);
+            assert!(!out.status.success());
+            assert!(String::from_utf8_lossy(&out.stderr).contains("only an accepted ADR"));
+        }
+        fs::remove_file(f.root.join(".devrec/fragments/successor.json")).unwrap();
+    }
+    let successor = json!({"schema_version":1,"id":"successor","kind":"adr","title":"Successor","body":"Successor rationale","accepted":true,"supersedes":["decision"]});
+    write(&f.root, "input.json", &successor);
+    let successor = f.ok(&["new", "input.json"])["record"].clone();
+    let before = f.ok(&["render"]);
+    let text = before["text"].as_str().unwrap();
+    assert!(text.contains("superseded by [successor](#record:successor)"));
+    assert!(text.contains("Original rationale"));
+    assert!(text.contains("Successor rationale"));
+    f.ok(&["release", "prepare", "v2"]);
+    f.ok(&["release", "review", "v2"]);
+    f.ok(&["release", "finalize", "v2"]);
+    assert_eq!(f.ok(&["render"]), before);
+    assert_eq!(f.baseline()["records"]["decision"], original);
+    assert_eq!(f.baseline()["records"]["successor"], successor);
+    assert!(!f.root.join(".devrec/fragments/successor.json").exists());
+    f.ok(&["check"]);
+}
+
+#[test]
+fn reconciliation_timeout_reserves_practical_bounded_wall_time() {
+    for seconds in [179, 601] {
+        let f = Fixture::new();
+        let mut config = read(&f.root, ".devrec/af.json");
+        config["timeout_secs"] = json!(seconds);
+        write(&f.root, ".devrec/af.json", &config);
+        f.prepared();
+        f.refused(&["release", "review", "v1"], "180..600 seconds");
+        assert!(!f.state.join("calls.jsonl").exists());
+    }
 }

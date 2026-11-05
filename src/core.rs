@@ -338,6 +338,11 @@ pub fn validate(records: &BTreeMap<String, Record>) -> Result<(), String> {
             if records[target].kind != r.kind {
                 return Err(format!("supersession must preserve kind: {id} -> {target}"));
             }
+            if records[target].accepted && !r.accepted {
+                return Err(format!(
+                    "only an accepted ADR may supersede accepted ADR {target}: {id} is unaccepted"
+                ));
+            }
             refs.insert(target.clone());
             replaced.insert(target.clone());
         }
@@ -545,6 +550,12 @@ mod tests {
         b.revises = None;
         b.revision = 1;
         b.supersedes = vec!["a".into()];
+        assert!(
+            validate(&map(vec![a.clone(), b.clone()]))
+                .unwrap_err()
+                .contains("only an accepted ADR")
+        );
+        b.accepted = true;
         assert!(validate(&map(vec![a, b])).is_ok());
     }
     #[test]

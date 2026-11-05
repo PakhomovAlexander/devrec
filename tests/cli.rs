@@ -5,12 +5,15 @@ use std::{
     process::{Command, Output},
 };
 fn cli(root: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_devrec"))
-        .arg("--root")
-        .arg(root)
-        .args(args)
-        .output()
-        .unwrap()
+    Command::new(
+        std::env::var_os("DEVREC_TEST_EXECUTABLE")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_devrec").into()),
+    )
+    .arg("--root")
+    .arg(root)
+    .args(args)
+    .output()
+    .unwrap()
 }
 fn ok(root: &Path, args: &[&str]) -> Value {
     let out = cli(root, args);

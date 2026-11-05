@@ -10,7 +10,7 @@ worker_input_type = "custom/DevrecStructuredInput@1"
 worker_output_type = "custom/DevrecReconciliationAdditions@1"
 [signature.attempt]
 tokens = 8192
-wall_ms = 20000
+wall_ms = 120000
 [runner]
 kind = "model"
 provider_kind = "codex"
