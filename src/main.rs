@@ -30,7 +30,7 @@ fn run() -> Result<Value, String> {
     }
     if args.is_empty() || args == ["--help"] || args == ["-h"] {
         return Ok(
-            json!({"schema":"devrec/help@1","usage":"devrec [--root DIR] new FILE | revise FILE | check | render [--nightly] | inventory | release prepare|request|review|finalize ID","new":"JSON record: id/name may be empty; allocates collision-resistant ID and readable name. revise requires revises predecessor ID."}),
+            json!({"schema":"devrec/help@1","usage":"devrec [--root DIR] new FILE | revise FILE | check | render [--nightly] | inventory | release prepare|request|review|finalize ID | af bundle EXECUTABLE DESTINATION","new":"JSON record: id/name may be empty; allocates collision-resistant ID and readable name. revise requires revises predecessor ID."}),
         );
     }
     if args == ["--version"] {
@@ -38,6 +38,9 @@ fn run() -> Result<Value, String> {
     }
     let s = Store::open(&root)?;
     match args[0].as_str() {
+        "af" if args.len() == 4 && args[1] == "bundle" => {
+            devrec::bundle::build(&root, &PathBuf::from(&args[2]), &args[3])
+        }
         "new" | "revise" if args.len() == 2 => {
             let _lock = s.lock()?;
             release::ready(&s)?;

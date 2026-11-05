@@ -1,0 +1,5 @@
+schema = "af.task-kind/2"
+name = "devrec/reconcile-kind"
+version = "1.0.0"
+kind = "devrec-reconciliation"
+profile = "structured"

@@ -1,8 +1,10 @@
-.PHONY: check check-local build test install
+.PHONY: check check-local check-native build test install
 # AF supplies an absolute writable scratch directory for sealed, read-only sources.
 # Never create target/ in the sealed tree. The private copy owns all build outputs.
 check:
 	@if [ -n "$${AF_CHECK_SCRATCH:-}" ]; then sh scripts/check-sealed.sh; else $(MAKE) check-local; fi
+check-native:
+	DEVREC_REQUIRE_NATIVE_AF=1 $(MAKE) check
 check-local:
 	mkdir -p target/tmp
 	CARGO_HOME="$(CURDIR)/target/cargo-home" TMPDIR="$(CURDIR)/target/tmp" cargo fmt --check

@@ -326,17 +326,21 @@ fn reconciled(s: &Store, p: &Plan, receipt: &Value) -> Result<State, String> {
         .ok_or("missing reconciliation additions")?;
     let mut b = state(s)?;
     let mut proposed = p.records.clone();
-    let mut seen = BTreeSet::new();
+    let mut additions = BTreeMap::new();
     for v in adds {
-        let mut r: Record = serde_json::from_value(v.clone()).map_err(|e| e.to_string())?;
+        let r: Record = serde_json::from_value(v.clone()).map_err(|e| e.to_string())?;
         id(&r.id)?;
-        if !seen.insert(r.id.clone())
+        if additions.contains_key(&r.id)
             || b.records.contains_key(&r.id)
             || proposed.contains_key(&r.id)
             || b.consumed.contains_key(&r.id)
         {
             return Err("reconciliation duplicates an existing ID".into());
         }
+        additions.insert(r.id.clone(), r);
+    }
+    // Validate against the complete graph, independent of the model's array order.
+    for mut r in additions.values().cloned() {
         // Model changes are explicit successors within the affected closure, never a rewrite of accepted state.
         if r.revises
             .iter()
@@ -346,7 +350,7 @@ fn reconciled(s: &Store, p: &Plan, receipt: &Value) -> Result<State, String> {
             .any(|id| {
                 p.request["baseline"].get(id).is_none()
                     && !p.records.contains_key(id)
-                    && !proposed.contains_key(id)
+                    && !additions.contains_key(id)
             })
         {
             return Err("reconciliation reference outside affected scope".into());
@@ -360,6 +364,7 @@ fn reconciled(s: &Store, p: &Plan, receipt: &Value) -> Result<State, String> {
                 b.records
                     .get(id)
                     .or_else(|| proposed.get(id))
+                    .or_else(|| additions.get(id))
                     .is_some_and(|prior| prior.accepted)
             })
         {

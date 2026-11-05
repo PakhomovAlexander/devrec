@@ -22,7 +22,7 @@ path = state/'task.json'
 def h(c): return 'sha256:'+c*64
 if op == 'plan':
     task = json.loads(pathlib.Path(arg('--file')).read_text())
-    captured = json.loads(pathlib.Path(arg('--input-json').split('=',1)[1]).read_text())
+    captured = json.loads((pathlib.Path(arg('--file')).parent / arg('--input-json').split('=',1)[1]).read_text())
     task.update(captured)
     task['authority'] = arg('--authority')
     task['finished'] = False
@@ -40,8 +40,8 @@ rev, planid = h('a'), h('b')
 if op == 'explain':
     execution = dict(kind='model', provider='codex-personal', provider_kind='codex', model='gpt-6.1-sol', effort='low')
     execution.update(control.get('execution', {}))
-    plan = dict(task_revision_id=rev, bindings={'reconcile':{'execution':execution}}, authority={'allowed_effects':['read-source'], 'policy_id':h('1')}, inputs={'request':{'artifact_type':'custom/DevrecReconciliationRequest@1','cardinality':'one','artifact_ids':[h('f')]}})
-    result = dict(schema='af/task-inspection@16', task_id=id, revision_id=rev, plan_id=planid, plan=plan, graph={'slots':{'reconcile':{'max_attempts':1}}})
+    plan = dict(limits=task['limits'], task_revision_id=rev, bindings={'reconcile':{'execution':execution}}, authority={'allowed_effects':['read-source'], 'policy_id':h('1')}, inputs={'request':{'artifact_type':'custom/DevrecReconciliationRequest@1','cardinality':'one','artifact_ids':[h('f')]}})
+    result = dict(schema='af/task-inspection@16', task_id=id, revision_id=rev, plan_id=planid, plan=plan, graph={'max_parallel':1,'slots':{'reconcile':{'max_attempts':1}},'nodes':{'input':{'operator':{'kind':'root_inputs'}},'admit':{'operator':{'kind':'provider_admission'}},'worker':{'operator':{'kind':'primitive','operator':{'op':'worker'}}},'accept':{'operator':{'kind':'primitive','operator':{'op':'structured_accept'}}}},'allowances':{'worker':{'max_attempts':1,'verification_attempts':0},'admit':{'max_attempts':1,'verification_attempts':0}}})
     for pointer, value in control.get('explain_edits', {}).items():
         keys=pointer.split('/'); current=result
         for key in keys[:-1]: current=current[key]
@@ -57,7 +57,7 @@ elif op == 'show':
         result['phase'] = {'kind':'finished', 'result_id':h('c')}
         result['result'] = dict(task_revision_id=control.get('result_revision',shown_rev), execution='completed', acceptance='satisfied', domain_conclusion='structurally_validated', evidence=control.get('evidence',[h('d')]), missing_obligations=[], outputs={'additions':{'artifact_type':'custom/DevrecReconciliationAdditions@1', 'artifact_ids':[h('e')]}})
 elif op == 'output':
-    payload = dict(schema='devrec/reconciliation-additions@1', request_digest=control.get('request_digest',task['request_digest']), additions=control.get('additions',[]), contradictions=control.get('contradictions',[]))
+    payload = dict(source_artifact_ids=[h('f')], schema='devrec/reconciliation-additions@1', request_digest=control.get('request_digest',task['request_digest']), additions=control.get('additions',[]), contradictions=control.get('contradictions',[]))
     result=dict(artifact_id=control.get('artifact_id',h('e')), type='custom/DevrecReconciliationAdditions@1', payload=payload)
 else: raise RuntimeError(op)
 print(json.dumps(result))
@@ -190,6 +190,9 @@ fn native_review_allocates_runs_and_preserves_explicit_additions_and_provenance(
     assert_eq!(calls.iter().filter(|v| v[1] == "run").count(), 1);
     let task = read(&f.state, "task.json");
     assert_eq!(task["schema"], "af.task-file/1");
+    assert_eq!(task["strategy"], "light");
+    assert_eq!(task["limits"]["max_attempts"], 2);
+    assert_eq!(task["limits"]["verification"]["attempts"], 0);
     assert_eq!(task["pipeline"]["fallback"], "refuse");
     assert_eq!(
         task["request"],
@@ -751,4 +754,53 @@ fn model_additions_after_compaction_preserve_prior_evidence_and_consume_late_rev
     assert_eq!(f.calls().iter().filter(|v| v[1] == "plan").count(), 2);
     assert_eq!(f.calls().iter().filter(|v| v[1] == "run").count(), 2);
     assert_eq!(f.ok(&["check"])["records"], 4);
+}
+
+#[test]
+fn additions_graph_is_independent_of_array_order_and_duplicates_are_refused() {
+    let mut baselines = Vec::new();
+    for reverse in [false, true] {
+        let f = Fixture::new();
+        f.prepared();
+        let mut parent = record("parent");
+        parent["depends_on"] = json!(["original"]);
+        let mut child = record("child");
+        child["depends_on"] = json!(["parent"]);
+        let additions = if reverse {
+            vec![parent, child]
+        } else {
+            vec![child, parent]
+        };
+        f.control(json!({"additions":additions}));
+        f.ok(&["release", "review", "v1"]);
+        f.ok(&["release", "finalize", "v1"]);
+        let mut baseline = f.baseline();
+        for record in baseline["records"].as_object_mut().unwrap().values_mut() {
+            record["provenance"] = Value::Null;
+        }
+        baselines.push(baseline);
+    }
+    assert_eq!(baselines[0], baselines[1]);
+    let f = Fixture::new();
+    f.prepared();
+    f.control(json!({"additions":[record("duplicate"), record("duplicate")]}));
+    f.refused(&["release", "review", "v1"], "duplicates an existing ID");
+}
+
+#[test]
+fn failed_bundle_validation_cleans_up_only_its_own_output() {
+    let owner = tempfile::tempdir().unwrap();
+    let base = fs::canonicalize(owner.path()).unwrap();
+    let executable = base.join("refusing-af");
+    fs::write(&executable, "#!/bin/sh\nexit 1\n").unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(devrec::bundle::build(&base, &executable, "new-bundle").is_err());
+    assert!(!base.join("new-bundle").exists());
+    fs::create_dir(base.join("reviewed-bundle")).unwrap();
+    fs::write(base.join("reviewed-bundle/owned"), "preserve").unwrap();
+    assert!(devrec::bundle::build(&base, &executable, "reviewed-bundle").is_err());
+    assert_eq!(
+        fs::read_to_string(base.join("reviewed-bundle/owned")).unwrap(),
+        "preserve"
+    );
 }
