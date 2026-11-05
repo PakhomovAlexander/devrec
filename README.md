@@ -10,6 +10,8 @@ make build
 make install
 ```
 
+Standalone checks can skip native runtime coverage when AF is absent. Use `make check-native` to require it. The sealed AF gate (`AF_CHECK_SCRATCH` set) always requires real native execution, including the privately installed CLI replay; see [native testing](docs/af-integration.md).
+
 Builds, dependency downloads, temporary test repositories, and the private installation stay under `target/`. The executable is `target/release/devrec`; `make install` also creates `target/install/bin/devrec`.
 
 Write a repository-contained JSON input, for example `entry.json`:

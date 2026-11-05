@@ -15,6 +15,7 @@ fn aliased_scratch_uses_physical_installed_paths_and_cleans_up() {
     let make = r#"#!/bin/sh
 set -eu
 test -z "${AF_CHECK_SCRATCH:-}"
+test "$DEVREC_REQUIRE_NATIVE_AF" = 1
 test "$PWD" = "$(pwd -P)"
 case "$1" in
 check-local) mkdir -p target/tmp ;;
@@ -29,6 +30,7 @@ esac
     let cargo = r#"#!/bin/sh
 set -eu
 physical=$(pwd -P)
+test "$DEVREC_REQUIRE_NATIVE_AF" = 1
 test "$TMPDIR" = "$physical/target/tmp"
 test "$CARGO_HOME" = "$physical/target/cargo-home"
 test "$DEVREC_TEST_EXECUTABLE" = "$physical/target/install/bin/devrec"
@@ -54,6 +56,8 @@ exit "$HARNESS_EXIT"
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .env("PATH", &path)
             .env("AF_CHECK_SCRATCH", &alias)
+            // The sealed gate must override even an explicitly optional caller.
+            .env("DEVREC_REQUIRE_NATIVE_AF", "0")
             .env("HARNESS_LOG", &log)
             .env("HARNESS_EXIT", code.to_string())
             .output()
